@@ -105,7 +105,7 @@ function init_canvas(container: HTMLElement | null) {
         return {x: mix(a.x, b.x, t), y: mix(a.y, b.y, t)};
     }
 
-    // let prev_angle: undefined | number = undefined;
+    let prev_angle: undefined | number = undefined;
 
     function draw_line_circles(c: CanvasRenderingContext2D, a: Point, b: Point, col: Color = color) {
         const dist = distance(a, b);
@@ -115,14 +115,14 @@ function init_canvas(container: HTMLElement | null) {
         const radius_double = radius * 2;
         const step = radius_half;
 
-        // prev_angle = prev_angle || angl;
+        prev_angle = prev_angle || angl;
 
 
         for (let i = 0; i < dist; i += step) {
 
-            // const p1 = {x: a.x + Math.cos(prev_angle) * i, y: a.y + Math.sin(prev_angle) * i};
-            const p = {x: a.x + Math.cos(angl) * i, y: a.y + Math.sin(angl) * i};
-            // const p = mix_point(p1, p2, i / dist);
+            const p1 = {x: a.x + Math.cos(prev_angle) * i, y: a.y + Math.sin(prev_angle) * i};
+            const p2 = {x: a.x + Math.cos(angl) * i, y: a.y + Math.sin(angl) * i};
+            const p = mix_point(p1, p2, i / dist);
 
             const radgrad = c.createRadialGradient(p.x, p.y, radius_half, p.x, p.y, radius);
             // console.log('color', color_to_string(col));
@@ -134,7 +134,7 @@ function init_canvas(container: HTMLElement | null) {
             c.fillRect(p.x - radius, p.y - radius, radius_double, radius_double);
         }
 
-        // prev_angle = angl;
+        prev_angle = angl;
     }
 
     let draw_mode = "circles";
@@ -177,7 +177,7 @@ function init_canvas(container: HTMLElement | null) {
         if (is_drawing) {
             draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
         }
-        // prev_angle = undefined;
+        prev_angle = undefined;
         is_drawing = false
     });
     
@@ -185,7 +185,7 @@ function init_canvas(container: HTMLElement | null) {
         if (is_drawing) {
             draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
         }
-        // prev_angle = undefined;
+        prev_angle = undefined;
         is_drawing = false
     });
 
