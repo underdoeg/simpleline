@@ -1,4 +1,5 @@
 import './style.css'
+import {OneEuroFilter} from '1eurofilter'
 
 type Point = {
     x: number,
@@ -17,6 +18,8 @@ function init_canvas(container: HTMLElement | null) {
         console.error('[CANVAS] container is invalid');
         return;
     }
+    
+    
 
     console.log('[CANVAS] init canvas');
 
@@ -62,17 +65,20 @@ function init_canvas(container: HTMLElement | null) {
     });
 
     function color_to_string(color: Color) {
-        return `rgba(${color.r},${color.g},${color.b},${color.a})`;
+        return `rgba(${Math.round(color.r*255)}, ${Math.round(color.g*255)}, ${Math.round(color.b*255)}, ${color.a})`;
     }
 
     let is_drawing = false;
     let mouse_prev = {x: 0, y: 0};
+    let mouse_history: Point[] = [];
+    let draw_delay = 4;
+
 
     /// Simple method
-
-    function draw_line_simple(c: CanvasRenderingContext2D, a: Point, b: Point) {
+    
+    function draw_line_simple(c: CanvasRenderingContext2D, a: Point, b: Point, col: Color = color) {
         c.beginPath();
-        c.strokeStyle = color_to_string(color);
+        c.strokeStyle = color_to_string(col);
         c.lineWidth = radius;
         c.lineJoin = 'round';
         c.lineCap = 'round';
@@ -86,21 +92,22 @@ function init_canvas(container: HTMLElement | null) {
     function distance(p1: Point, p2: Point) {
         return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
     }
-    
+
     function angle(p1: Point, p2: Point) {
         return Math.atan2(p2.y - p1.y, p2.x - p1.x);
     }
-    
+
     function mix(a: number, b: number, t: number) {
         return a * (1 - t) + b * t;
     }
-    
+
     function mix_point(a: Point, b: Point, t: number) {
         return {x: mix(a.x, b.x, t), y: mix(a.y, b.y, t)};
     }
 
-    let prev_angle: undefined | number = undefined;
-    function draw_line_circles(c: CanvasRenderingContext2D, a: Point, b: Point) {
+    // let prev_angle: undefined | number = undefined;
+
+    function draw_line_circles(c: CanvasRenderingContext2D, a: Point, b: Point, col: Color = color) {
         const dist = distance(a, b);
         const angl = angle(a, b);
         const radius_half = radius / 2;
@@ -108,49 +115,60 @@ function init_canvas(container: HTMLElement | null) {
         const radius_double = radius * 2;
         const step = radius_half;
 
-        prev_angle = prev_angle || angl;
-        
-        
-        for (let i = 0; i < dist; i += step) {
-            
-            const p1 = {x: a.x + Math.cos(prev_angle) * i, y: a.y + Math.sin(prev_angle) * i};
-            const p2 = {x: a.x + Math.cos(angl) * i, y: a.y + Math.sin(angl) * i};
-            const p = mix_point(p1, p2, i / dist);
-            
-            const radgrad = c.createRadialGradient(p.x, p.y, radius_half, p.x, p.y, radius);
+        // prev_angle = prev_angle || angl;
 
-            radgrad.addColorStop(0, color_to_string(color));
-            radgrad.addColorStop(0.5, color_to_string({...color, a: 0.7}));
-            radgrad.addColorStop(1, color_to_string({...color, a: 0}));
+
+        for (let i = 0; i < dist; i += step) {
+
+            // const p1 = {x: a.x + Math.cos(prev_angle) * i, y: a.y + Math.sin(prev_angle) * i};
+            const p = {x: a.x + Math.cos(angl) * i, y: a.y + Math.sin(angl) * i};
+            // const p = mix_point(p1, p2, i / dist);
+
+            const radgrad = c.createRadialGradient(p.x, p.y, radius_half, p.x, p.y, radius);
+            // console.log('color', color_to_string(col));
+            radgrad.addColorStop(0, color_to_string(col));
+            radgrad.addColorStop(0.7, color_to_string({...col, a: 0.5}));
+            radgrad.addColorStop(1, color_to_string({...col, a: 0}));
 
             c.fillStyle = radgrad;
             c.fillRect(p.x - radius, p.y - radius, radius_double, radius_double);
         }
 
-
-        // c.beginPath();
-        // c.strokeStyle = "red";
-        // c.lineWidth = 1;
-        // c.moveTo(a.x, a.y);
-        // c.lineTo(a.x + Math.sin(angl) * 50, a.y + Math.cos(angl) * 50);
-        // c.closePath();
-        // c.stroke();
-        
-        prev_angle = angl;
+        // prev_angle = angl;
     }
 
     let draw_mode = "circles";
     const draw_line = draw_mode == "circles" ? draw_line_circles : draw_line_simple;
 
+    const frequency = 120; // Hz
+    const mincutoff = .9; // Hz
+    const beta = 0.01;
+    const dcutoff = 1.0; // Hz
+    let euro_x:undefined | OneEuroFilter = undefined;
+    let euro_y:undefined | OneEuroFilter = undefined;
+    let draw_started = Date.now();
+    let prev_euro: Point = {x: 0, y: 0};
+    
     canvas.addEventListener('mousedown', (evt) => {
         is_drawing = true;
+        euro_x = new OneEuroFilter(frequency, mincutoff, beta, dcutoff);
+        euro_y = new OneEuroFilter(frequency, mincutoff, beta, dcutoff);
+        draw_started = Date.now();
         mouse_prev = {x: evt.offsetX, y: evt.offsetY};
+        prev_euro = mouse_prev;
     });
 
     canvas.addEventListener('mousemove', (evt) => {
-        const p = {x: evt.offsetX, y: evt.offsetY};
+        let p = {x: evt.offsetX, y: evt.offsetY};
         if (is_drawing) {
-            draw_line(ctx, mouse_prev, p);
+            // draw_line(ctx, mouse_prev, p, {r: 1, g: 0, b: 0, a: 1});
+            const seconds = (Date.now() - draw_started) / 1000;
+            const p_euro = {
+                x: euro_x!.filter(p.x, seconds), 
+                y: euro_y!.filter(p.y, seconds)
+            };
+            draw_line(ctx, prev_euro, p_euro);
+            prev_euro = p_euro;
         }
         mouse_prev = p;
     });
@@ -159,72 +177,17 @@ function init_canvas(container: HTMLElement | null) {
         if (is_drawing) {
             draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
         }
-        prev_angle = undefined;
+        // prev_angle = undefined;
         is_drawing = false
     });
-
-
-    // quadratic method
-
-    // function draw_points(ctx: CanvasRenderingContext2D, points: Point[]) {
-    //     // draw a basic circle instead
-    //     ctx.beginPath();
-    //     ctx.lineWidth = 20;
-    //     ctx.lineJoin = 'round';
-    //     ctx.lineCap = 'round';
-    //     ctx.strokeStyle = 'black';
-    //
-    //     if (points.length < 6) {
-    //         const b = points[0];
-    //         ctx.arc(b.x, b.y, ctx.lineWidth / 2, 0, Math.PI * 2, !0);
-    //         ctx.closePath();
-    //         ctx.fill();
-    //         return
-    //     }
-    //
-    //     let i = 0;
-    //     ctx.moveTo(points[i].x, points[i].y);
-    //     for (i = 1; i < points.length - 2; i++) {
-    //         const c = (points[i].x + points[i + 1].x) / 2,
-    //             d = (points[i].y + points[i + 1].y) / 2;
-    //         ctx.quadraticCurveTo(points[i].x, points[i].y, c, d)
-    //     }
-    //     ctx.quadraticCurveTo(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y);
-    //     ctx.stroke()
-    // }
-    //
-    //
-    // let is_drawing = false;
-    // // let mouse_prev = {x: 0, y: 0};
-    // let mouse_history: Point[] = [];
-    //
-    // function add_to_history(evt: MouseEvent) {
-    //     mouse_history.push({x: evt.offsetX, y: evt.offsetY});
-    // }
-    //
-    // canvas.addEventListener('mousedown', (event) => {
-    //     is_drawing = true;
-    //     mouse_history = [];
-    //     add_to_history(event);
-    // });
-    //
-    // canvas.addEventListener('mousemove', (event) => {
-    //     if (is_drawing) {
-    //         add_to_history(event);
-    //         draw_points(ctx, mouse_history);
-    //     }
-    // });
-    //
-    // canvas.addEventListener('mouseup', (_event) => {
-    //     if (is_drawing) {
-    //         add_to_history(_event);
-    //         draw_points(ctx, mouse_history);
-    //     }
-    //     is_drawing = false;
-    //     mouse_history = [];
-    // });
-    //
-
+    
+    canvas.addEventListener('mouseleave', (evt) => {
+        if (is_drawing) {
+            draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
+        }
+        // prev_angle = undefined;
+        is_drawing = false
+    });
 
 }
 
