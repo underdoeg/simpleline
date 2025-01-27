@@ -13,6 +13,7 @@
     "vite": "^6.0.5"
   },
   "dependencies": {
-    "1eurofilter": "^1.2.2"
+    "1eurofilter": "^1.2.2",
+    "simplex-noise": "^4.0.3"
   }
 }

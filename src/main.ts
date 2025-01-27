@@ -1,5 +1,6 @@
 import './style.css'
 import {OneEuroFilter} from '1eurofilter'
+import {createNoise2D} from 'simplex-noise';
 
 type Point = {
     x: number,
@@ -18,8 +19,6 @@ function init_canvas(container: HTMLElement | null) {
         console.error('[CANVAS] container is invalid');
         return;
     }
-    
-    
 
     console.log('[CANVAS] init canvas');
 
@@ -41,18 +40,25 @@ function init_canvas(container: HTMLElement | null) {
 
     resize_canvas();
 
-    const observer = new ResizeObserver((_entries) => {
+    // const observer = new ResizeObserver((_entries) => {
+    //     resize_canvas();
+    // });
+    // observer.observe(container!);
+
+    window.addEventListener('resize', () => {
         resize_canvas();
     });
-    observer.observe(container!);
 
     const ctx = canvas.getContext("2d")!;
 
 
     //////////////////////////////////////////
 
+
     let radius = 10;
     let color: Color = {r: 0, g: 0, b: 0, a: 1};
+    let draw_speed = 1;
+    let enable_mouse_draw = false;
 
     function clear_canvas() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -65,17 +71,14 @@ function init_canvas(container: HTMLElement | null) {
     });
 
     function color_to_string(color: Color) {
-        return `rgba(${Math.round(color.r*255)}, ${Math.round(color.g*255)}, ${Math.round(color.b*255)}, ${color.a})`;
+        return `rgba(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)}, ${color.a})`;
     }
 
     let is_drawing = false;
     let mouse_prev = {x: 0, y: 0};
-    let mouse_history: Point[] = [];
-    let draw_delay = 4;
-
 
     /// Simple method
-    
+
     function draw_line_simple(c: CanvasRenderingContext2D, a: Point, b: Point, col: Color = color) {
         c.beginPath();
         c.strokeStyle = color_to_string(col);
@@ -107,7 +110,7 @@ function init_canvas(container: HTMLElement | null) {
 
     let prev_angle: undefined | number = undefined;
 
-    function draw_line_circles(c: CanvasRenderingContext2D, a: Point, b: Point, col: Color = color) {
+    function draw_line_circles(c: CanvasRenderingContext2D, a: Point, b: Point, col: Color = color, interpolate_angle: boolean = true) {
         const dist = distance(a, b);
         const angl = angle(a, b);
         const radius_half = radius / 2;
@@ -122,7 +125,7 @@ function init_canvas(container: HTMLElement | null) {
 
             const p1 = {x: a.x + Math.cos(prev_angle) * i, y: a.y + Math.sin(prev_angle) * i};
             const p2 = {x: a.x + Math.cos(angl) * i, y: a.y + Math.sin(angl) * i};
-            const p = mix_point(p1, p2, i / dist);
+            const p = interpolate_angle ? mix_point(p1, p2, i / dist) : p2;
 
             const radgrad = c.createRadialGradient(p.x, p.y, radius_half, p.x, p.y, radius);
             // console.log('color', color_to_string(col));
@@ -140,55 +143,102 @@ function init_canvas(container: HTMLElement | null) {
     let draw_mode = "circles";
     const draw_line = draw_mode == "circles" ? draw_line_circles : draw_line_simple;
 
-    const frequency = 120; // Hz
-    const mincutoff = .9; // Hz
-    const beta = 0.01;
-    const dcutoff = 1.0; // Hz
-    let euro_x:undefined | OneEuroFilter = undefined;
-    let euro_y:undefined | OneEuroFilter = undefined;
-    let draw_started = Date.now();
-    let prev_euro: Point = {x: 0, y: 0};
-    
-    canvas.addEventListener('mousedown', (evt) => {
-        is_drawing = true;
-        euro_x = new OneEuroFilter(frequency, mincutoff, beta, dcutoff);
-        euro_y = new OneEuroFilter(frequency, mincutoff, beta, dcutoff);
-        draw_started = Date.now();
-        mouse_prev = {x: evt.offsetX, y: evt.offsetY};
-        prev_euro = mouse_prev;
-    });
-
-    canvas.addEventListener('mousemove', (evt) => {
-        let p = {x: evt.offsetX, y: evt.offsetY};
-        if (is_drawing) {
-            // draw_line(ctx, mouse_prev, p, {r: 1, g: 0, b: 0, a: 1});
-            const seconds = (Date.now() - draw_started) / 1000;
-            const p_euro = {
-                x: euro_x!.filter(p.x, seconds), 
-                y: euro_y!.filter(p.y, seconds)
-            };
-            draw_line(ctx, prev_euro, p_euro);
-            prev_euro = p_euro;
+    if (!enable_mouse_draw) {
+        // auto draw with noise
+        const noise = createNoise2D(Math.random);
+        
+        let last_frame: undefined | number;
+        let last_point:Point | undefined;
+        let noise_off :Point | undefined;
+        
+        function reset_noise(){
+            noise_off = {x: Math.random() * canvas.width, y: Math.random() * canvas.height};
         }
-        mouse_prev = p;
-    });
-
-    canvas.addEventListener('mouseup', (evt) => {
-        if (is_drawing) {
-            draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
+        
+        window.addEventListener('resize', () => {
+            console.log("resize");
+        });
+        
+        function process(){
+            requestAnimationFrame(process);
+            if(!last_frame){
+                last_frame = Date.now();
+                return;
+            }
+            if(!noise_off){
+                reset_noise();
+            }
+            const now = Date.now();
+            const dt = (now - last_frame) / 1000;
+            
+            noise_off!.x += dt * draw_speed;
+            noise_off!.y += dt * draw_speed;
+            
+            const x = (noise(noise_off!.x, 1000) + 1) * .5;
+            const y = (noise(noise_off!.y, 300) + 1) * .5;
+            if(!last_point){
+                last_point = {x: x * canvas.width, y: y * canvas.height};
+                return;
+            }
+            const p = {x: x * canvas.width, y: y * canvas.height};
+            draw_line(ctx, last_point, p);
+            
+            last_point = p;
+            last_frame = now;
         }
-        prev_angle = undefined;
-        is_drawing = false
-    });
-    
-    canvas.addEventListener('mouseleave', (evt) => {
-        if (is_drawing) {
-            draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
-        }
-        prev_angle = undefined;
-        is_drawing = false
-    });
+        requestAnimationFrame(process);
+        
+        
+    } else {
+        const frequency = 120; // Hz
+        const mincutoff = .9; // Hz
+        const beta = 0.01;
+        const dcutoff = 1.0; // Hz
+        let euro_x: undefined | OneEuroFilter = undefined;
+        let euro_y: undefined | OneEuroFilter = undefined;
+        let draw_started = Date.now();
+        let prev_euro: Point = {x: 0, y: 0};
 
+        canvas.addEventListener('mousedown', (evt) => {
+            is_drawing = true;
+            euro_x = new OneEuroFilter(frequency, mincutoff, beta, dcutoff);
+            euro_y = new OneEuroFilter(frequency, mincutoff, beta, dcutoff);
+            draw_started = Date.now();
+            mouse_prev = {x: evt.offsetX, y: evt.offsetY};
+            prev_euro = mouse_prev;
+        });
+
+        canvas.addEventListener('mousemove', (evt) => {
+            let p = {x: evt.offsetX, y: evt.offsetY};
+            if (is_drawing) {
+                // draw_line(ctx, mouse_prev, p, {r: 1, g: 0, b: 0, a: 1});
+                const seconds = (Date.now() - draw_started) / 1000;
+                const p_euro = {
+                    x: euro_x!.filter(p.x, seconds),
+                    y: euro_y!.filter(p.y, seconds)
+                };
+                draw_line(ctx, prev_euro, p_euro, true);
+                prev_euro = p_euro;
+            }
+            mouse_prev = p;
+        });
+
+        canvas.addEventListener('mouseup', (evt) => {
+            if (is_drawing) {
+                draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
+            }
+            prev_angle = undefined;
+            is_drawing = false
+        });
+
+        canvas.addEventListener('mouseleave', (evt) => {
+            if (is_drawing) {
+                draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
+            }
+            prev_angle = undefined;
+            is_drawing = false
+        });
+    }
 }
 
 init_canvas(document.querySelector<HTMLElement>('#canvas'))
