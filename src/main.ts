@@ -58,7 +58,7 @@ function init_canvas(container: HTMLElement | null) {
     let radius = 10;
     let color: Color = {r: 0, g: 0, b: 0, a: 1};
     let draw_speed = 1;
-    let enable_mouse_draw = false;
+    let enable_mouse_draw = true;
 
     function clear_canvas() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -198,18 +198,31 @@ function init_canvas(container: HTMLElement | null) {
         let euro_y: undefined | OneEuroFilter = undefined;
         let draw_started = Date.now();
         let prev_euro: Point = {x: 0, y: 0};
-
-        canvas.addEventListener('mousedown', (evt) => {
+        
+        function begin_draw(evt:MouseEvent){
             is_drawing = true;
             euro_x = new OneEuroFilter(frequency, mincutoff, beta, dcutoff);
             euro_y = new OneEuroFilter(frequency, mincutoff, beta, dcutoff);
             draw_started = Date.now();
             mouse_prev = {x: evt.offsetX, y: evt.offsetY};
             prev_euro = mouse_prev;
+        }
+
+        canvas.addEventListener('mousedown', (evt) => {
+            begin_draw(evt);
         });
 
+        canvas.addEventListener('mouseenter', (evt) => {
+            begin_draw(evt);
+        });
+        
         canvas.addEventListener('mousemove', (evt) => {
+            if(!is_drawing){
+                begin_draw(evt);
+            }
+            
             let p = {x: evt.offsetX, y: evt.offsetY};
+            
             if (is_drawing) {
                 // draw_line(ctx, mouse_prev, p, {r: 1, g: 0, b: 0, a: 1});
                 const seconds = (Date.now() - draw_started) / 1000;
@@ -217,27 +230,32 @@ function init_canvas(container: HTMLElement | null) {
                     x: euro_x!.filter(p.x, seconds),
                     y: euro_y!.filter(p.y, seconds)
                 };
-                draw_line(ctx, prev_euro, p_euro, true);
+                draw_line(ctx, prev_euro, p_euro, color, false);
                 prev_euro = p_euro;
             }
             mouse_prev = p;
         });
 
-        canvas.addEventListener('mouseup', (evt) => {
-            if (is_drawing) {
-                draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
-            }
-            prev_angle = undefined;
-            is_drawing = false
-        });
+        // canvas.addEventListener('mouseup', (evt) => {
+        //     if (is_drawing) {
+        //         draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
+        //     }
+        //     prev_angle = undefined;
+        //     is_drawing = false
+        // });
+        //
+        // canvas.addEventListener('mouseleave', (evt) => {
+        //     if (is_drawing) {
+        //         draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
+        //     }
+        //     prev_angle = undefined;
+        //     is_drawing = false
+        // });
 
-        canvas.addEventListener('mouseleave', (evt) => {
-            if (is_drawing) {
-                draw_line(ctx, mouse_prev, {x: evt.offsetX, y: evt.offsetY});
-            }
-            prev_angle = undefined;
-            is_drawing = false
-        });
+        // window.addEventListener('focus', () => {
+        //     ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // });
+        
     }
 }
 
