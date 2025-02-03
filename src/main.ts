@@ -55,7 +55,7 @@ function init_canvas(container: HTMLElement | null) {
     //////////////////////////////////////////
 
 
-    let radius = 10;
+    let radius = 5;
     let color: Color = {r: 0, g: 0, b: 0, a: 1};
     let draw_speed = 1;
     let enable_mouse_draw = true;
@@ -230,7 +230,7 @@ function init_canvas(container: HTMLElement | null) {
                     x: euro_x!.filter(p.x, seconds),
                     y: euro_y!.filter(p.y, seconds)
                 };
-                draw_line(ctx, prev_euro, p_euro, color, false);
+                draw_line(ctx, prev_euro, p_euro, color, true);
                 prev_euro = p_euro;
             }
             mouse_prev = p;
